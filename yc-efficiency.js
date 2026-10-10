@@ -69,7 +69,7 @@ function details(row){
  return '价格（'+(row.type==='building'?'购买1个':'当前升级')+'）：'+number(row.price)+' '+(row.currency||'饼干')+
   '<br>挂机产量增量：'+number(row.delta)+' 饼干/秒<br>性价比：'+label(row)+'<br>理想回本：'+duration(row.payback)+
   (row.click>0?'<br>每次点击增量：'+number(row.click)+' 饼干':'')+
-  '<br>含当前限时效果的增量：'+number(row.fullDelta)+' 饼干/秒（效果会过期）';
+  '<br>含当前限时效果的增量：'+number(row.fullDelta)+' 饼干/秒'+(row.fullDelta===row.delta?'（与常态相同）':'（限时加成会过期）');
 }
 function tip(type,id){
  if(!enabled)return '';
