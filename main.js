@@ -6852,7 +6852,7 @@ Game.Launch=function()
 					if (true)//lang!=locId)
 					{
 						PlaySound('snd/tick.mp3');
-						localStorageSet('CookieClickerLang',lang);
+						localStorageSet('CookieClickerLang-YC',lang);
 						Game.toSave=true;
 						Game.toReload=true;
 					}
@@ -16492,8 +16492,10 @@ Game.Launch=function()
 				setTimeout(function(){
 					var local=localStorageGet(Game.SaveTo);
 					Game.LoadSave(local);
+					window.dispatchEvent(new Event('yc-initial-save-ready'));
 				},500);
 			}
+			else setTimeout(function(){window.dispatchEvent(new Event('yc-initial-save-ready'));},0);
 		}
 		else if (App.saveData) setTimeout(function(){Game.LoadSave(App.saveData);},100);
 		else setTimeout(function(){Game.LoadSave();},100);
@@ -16927,7 +16929,7 @@ Game.Launch=function()
 		{
 			var title='Cookie Clicker';
 			if (Game.season=='fools') title='Cookie Baker';
-			document.title=(Game.OnAscend?(EN?'Ascending! ':(loc("Ascending")+' | ')):'')+loc("%1 cookie",LBeautify(Game.cookies))+' - '+title;
+			document.title='YC自用';
 		}
 		if (Game.T%15==0)
 		{
@@ -17259,7 +17261,7 @@ window.onload=function()
 	{
 		var loadLangAndLaunch=function(lang,firstLaunch)
 		{
-			if (!firstLaunch) localStorageSet('CookieClickerLang',lang);
+			if (!firstLaunch) localStorageSet('CookieClickerLang-YC',lang);
 			
 			var launchSteps=[
 				function(next){
@@ -17351,10 +17353,10 @@ window.onload=function()
 			}
 		}
 		
-		var lang=localStorageGet('CookieClickerLang');
+		var lang=localStorageGet('CookieClickerLang-YC');
 		if (lang=='undefined') lang=false;
 		if (App && !lang) showLangSelect(loadLangAndLaunch);
-		else if (!lang) {loadLangAndLaunch('EN',true);}
+		else if (!lang || !Langs[lang]) {loadLangAndLaunch('ZH-CN');}
 		else loadLangAndLaunch(lang);
 	}
 };

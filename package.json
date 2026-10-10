@@ -1,0 +1,13 @@
+{
+  "name": "yc-self-use",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/core.test.cjs",
+    "test:browser": "node tests/browser.cjs",
+    "package": "node scripts/package.cjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.64.0"
+  }
+}
