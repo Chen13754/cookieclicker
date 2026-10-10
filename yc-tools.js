@@ -12,6 +12,7 @@
     function message(text) { status.textContent = text; }
     function enable() {
         ready = true;
+        window.YCEfficiency.init({ show, dialog, busy: () => busyGame() || !!recovery });
         toggle.disabled = false;
         bar.querySelectorAll('[data-yc-ready]').forEach(button => { button.disabled = false; });
         message('个人使用，请勿传播');
@@ -28,12 +29,14 @@
         style.setProperty('--yc-left', (viewport ? viewport.offsetLeft : 0) + 'px');
         style.setProperty('--yc-top', (viewport ? viewport.offsetTop : 0) + 'px');
         bar.dataset.narrow = String(width / unit < 620);
+        if (dialog) dialog.dataset.narrow = bar.dataset.narrow;
     }
     function show(title, html, kind) {
         selection++;
         if (bar.open) { bar.close(); toggle.setAttribute('aria-expanded', 'false'); }
         if (dialog.open) dialog.close();
         view = kind || '';
+        dialog.dataset.ycView = view;
         dialog.innerHTML = '<header><h2 id="yc-dialog-title"></h2><button type="button" id="yc-close" aria-label="关闭">关闭</button></header>' + html;
         byId('yc-dialog-title').textContent = title;
         byId('yc-close').addEventListener('click', () => dialog.close());
@@ -169,7 +172,7 @@
             toggle = byId('yc-tools-toggle');
             bar = document.createElement('dialog');
             bar.id = 'yc-toolbar'; bar.setAttribute('aria-labelledby', 'yc-tools-title');
-            bar.innerHTML = '<header class="yc-drawer-head"><div class="yc-brand"><h2 id="yc-tools-title">YC自用</h2><span id="yc-status" role="status">正在初始化…</span></div><button type="button" id="yc-collapse">收起</button></header><div class="yc-actions"><button type="button" id="yc-export" data-yc-ready disabled>导出存档</button><button type="button" id="yc-import" data-yc-ready disabled>导入存档</button><button type="button" id="yc-boost" data-yc-ready disabled>资源增益</button></div>';
+            bar.innerHTML = '<header class="yc-drawer-head"><div class="yc-brand"><h2 id="yc-tools-title">YC自用</h2><span id="yc-status" role="status">正在初始化…</span></div><button type="button" id="yc-collapse">收起</button></header><div class="yc-actions"><button type="button" id="yc-export" data-yc-ready disabled>导出存档</button><button type="button" id="yc-import" data-yc-ready disabled>导入存档</button><button type="button" id="yc-boost" data-yc-ready disabled>资源增益</button><button type="button" id="yc-efficiency" data-yc-ready disabled>性价比</button></div>';
             document.body.appendChild(bar);
             status = byId('yc-status');
             dialog = document.createElement('dialog');
@@ -203,6 +206,7 @@
             byId('yc-export').addEventListener('click', exportSave);
             byId('yc-import').addEventListener('click', importPanel);
             byId('yc-boost').addEventListener('click', boostPanel);
+            byId('yc-efficiency').addEventListener('click', () => window.YCEfficiency.panel());
             // Native Options file/import buttons use the same preview and rollback protection.
             Game.ImportSave = importPanel;
             Game.FileLoad = readFile;

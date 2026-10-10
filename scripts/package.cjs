@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const root=path.resolve(__dirname,'..'),dest=path.join(root,'dist');
 // Only game runtime files enter Pages; tests, dependencies, caches and local saves never do.
-const files=['index.html','style.css','base64.js','main.js','ajax.js','DungeonGen.js','dungeons.js','excanvas.compiled.js','minigameGarden.js','minigameGrimoire.js','minigameMarket.js','minigamePantheon.js','yc-save-core.js','yc-tools.js','yc-tools.css','.nojekyll'];
+const files=['index.html','style.css','base64.js','main.js','ajax.js','DungeonGen.js','dungeons.js','excanvas.compiled.js','minigameGarden.js','minigameGrimoire.js','minigameMarket.js','minigamePantheon.js','yc-save-core.js','yc-tools.js','yc-tools.css','yc-efficiency-core.js','yc-efficiency.js','.nojekyll'];
 const dirs=['img','snd','loc','cf-fonts'];
 if(path.dirname(dest)!==root || path.basename(dest)!=='dist')throw Error('Invalid output directory');
 fs.rmSync(dest,{recursive:true,force:true});fs.mkdirSync(dest);

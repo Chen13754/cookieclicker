@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node --test tests/core.test.cjs",
+    "test": "node --test tests/core.test.cjs tests/efficiency.test.cjs && node scripts/generate-efficiency.cjs --check",
     "test:browser": "node tests/browser.cjs",
     "test:online": "node tests/online.cjs",
-    "package": "node scripts/package.cjs"
+    "package": "node scripts/package.cjs",
+    "test:efficiency": "node tests/efficiency.browser.cjs"
   },
   "devDependencies": {
     "playwright-core": "1.64.0"
