@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node --test tests/core.test.cjs",
     "test:browser": "node tests/browser.cjs",
+    "test:online": "node tests/online.cjs",
     "package": "node scripts/package.cjs"
   },
   "devDependencies": {

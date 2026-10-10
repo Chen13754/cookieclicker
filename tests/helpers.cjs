@@ -12,7 +12,7 @@ const {chromium} = require('playwright-core');
 const baseline = 'c77f00c51854a667da35a3135120797a579c2d72';
 const mime = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.gif':'image/gif','.ico':'image/x-icon','.svg':'image/svg+xml','.woff2':'font/woff2','.mp3':'audio/mpeg','.ogg':'audio/ogg','.json':'application/json','.txt':'text/plain'};
 async function start() {
-  const originalIndex=fs.readFileSync(path.join(root,'index.html'),'utf8').replace("var PRESETMODS=['yc-tools.js?v=1'];",'var PRESETMODS=[];').replace("var SAVESUFFIX='YC';","var SAVESUFFIX='';").replace(/<script src="yc-save-core[^>]*><\/script>/,'').replace(/<link href="yc-tools[^>]*>/,'');
+  const originalIndex=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/var PRESETMODS=\[[^\]]*\];/,'var PRESETMODS=[];').replace("var SAVESUFFIX='YC';","var SAVESUFFIX='';").replace(/<script src="yc-save-core[^>]*><\/script>/,'').replace(/<link href="yc-tools[^>]*>/,'');
   const originalMain=execFileSync('git',['show',baseline+':main.js'],{cwd:root,maxBuffer:8*1024*1024});
   const server = http.createServer((req,res) => {
     let url = decodeURIComponent(new URL(req.url,'http://localhost').pathname);
@@ -40,8 +40,16 @@ async function load(context,url,original=false) {
   if(original)await page.addInitScript(()=>localStorage.setItem('CookieClickerLang','ZH-CN'));
   const response=await page.goto(url,{waitUntil:'load'}); if(response.status()!==200)throw Error('HTTP '+response.status());
   await page.waitForFunction(()=>window.Game && Game.ready===1).catch(async e=>{console.log('load debug',errors,await page.evaluate(()=>({ready:window.Game?.ready,lang:window.locId,html:document.body.innerText.slice(0,400),scripts:[...document.scripts].map(x=>x.src)})));throw e;});
-  if(!original)await page.locator('#yc-export').waitFor({state:'visible'});
-  if(!original)await page.waitForFunction(()=>!document.getElementById('yc-export').disabled);
+  if(!original)await page.locator('#yc-tools-toggle').waitFor({state:'visible'});
+  if(!original)await page.waitForFunction(()=>!document.getElementById('yc-tools-toggle').disabled);
   return {page,errors};
 }
-module.exports={start,load,root,baseline};
+async function openTools(page,touch=false) {
+  if(!await page.locator('#yc-toolbar').evaluate(el=>el.open))await page.locator('#yc-tools-toggle')[touch?'tap':'click']();
+}
+async function tool(page,selector,touch=false) {
+  await openTools(page,touch);
+  await page.locator(selector)[touch?'tap':'click']();
+  if(await page.locator('#yc-toolbar').evaluate(el=>el.open))throw Error('Drawer remained open behind action dialog');
+}
+module.exports={start,load,root,baseline,openTools,tool};

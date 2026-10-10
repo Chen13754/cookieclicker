@@ -5,13 +5,14 @@
     if (Game.mods[id]) return;
     const core = window.YCSaveCore;
     let ready = false, warned = false, recovery = null, selection = 0, view = '';
-    let bar, dialog, status;
+    let bar, dialog, status, toggle;
     const byId = name => document.getElementById(name);
     const format = value => new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumSignificantDigits: 6 }).format(value);
     const busyGame = () => !!(Game.OnAscend || Game.AscendTimer || Game.ReincarnateTimer || Game.ObjectsById.some(me => me.minigameLoading));
     function message(text) { status.textContent = text; }
     function enable() {
         ready = true;
+        toggle.disabled = false;
         bar.querySelectorAll('[data-yc-ready]').forEach(button => { button.disabled = false; });
         message('个人使用，请勿传播');
     }
@@ -30,6 +31,7 @@
     }
     function show(title, html, kind) {
         selection++;
+        if (bar.open) { bar.close(); toggle.setAttribute('aria-expanded', 'false'); }
         if (dialog.open) dialog.close();
         view = kind || '';
         dialog.innerHTML = '<header><h2 id="yc-dialog-title"></h2><button type="button" id="yc-close" aria-label="关闭">关闭</button></header>' + html;
@@ -75,8 +77,9 @@
     function checkImport(code) {
         if (!ready || recovery) return;
         if (busyGame()) { error('正在转生、返回游戏或加载小游戏，请稍后再导入。'); return; }
+        const validate = text => core.parseSave(text, Game.version, b64_to_utf8, { buildings: Game.ObjectsById.filter(me => me.vanilla).length, upgrades: Object.values(Game.UpgradesById).filter(me => me.vanilla).length, achievements: Object.values(Game.AchievementsById).filter(me => me.vanilla).length });
         let parsed;
-        try { parsed = core.parseSave(code, Game.version, b64_to_utf8, { buildings: Game.ObjectsById.filter(me => me.vanilla).length, upgrades: Object.values(Game.UpgradesById).filter(me => me.vanilla).length, achievements: Object.values(Game.AchievementsById).filter(me => me.vanilla).length }); }
+        try { parsed = validate(code); }
         catch (problem) { error(problem.message); return; }
         show('确认覆盖当前进度', '<p>导入会替换本浏览器的当前进度。想保留当前进度，请先取消并导出。</p><dl><dt>保存时间</dt><dd id="yc-import-time"></dd><dt>游戏版本</dt><dd id="yc-import-version"></dd><dt>饼干店</dt><dd id="yc-import-bakery"></dd><dt>饼干库存</dt><dd id="yc-import-cookies"></dd></dl><div class="yc-actions"><button id="yc-cancel-import" type="button" data-yc-focus>取消</button><button id="yc-confirm-import" class="yc-primary" type="button">覆盖并导入</button></div>', 'confirm');
         byId('yc-import-time').textContent = new Date(parsed.savedAt).toLocaleString('zh-CN');
@@ -87,7 +90,7 @@
         byId('yc-confirm-import').addEventListener('click', () => {
             if (busyGame()) { error('当前正在转生或加载小游戏，请稍后再试。'); return; }
             let result;
-            try { result = core.importSave(Game, window.localStorage, parsed.code); }
+            try { result = core.importSave(Game, window.localStorage, parsed.code, validate); }
             catch (_) { error('浏览器拒绝读取本地存档，无法安全导入；仍可导出当前进度。'); return; }
             if (result.ok) {
                 dialog.close();
@@ -163,24 +166,40 @@
     Game.registerMod(id, {
         name: 'YC自用工具',
         init: function () {
-            bar = document.createElement('nav');
-            bar.id = 'yc-toolbar'; bar.setAttribute('aria-label', '个人工具');
-            bar.innerHTML = '<div class="yc-brand"><strong>YC自用</strong><span id="yc-status" role="status">正在初始化…</span></div><div class="yc-actions"><button type="button" id="yc-export" data-yc-ready disabled>导出存档</button><button type="button" id="yc-import" data-yc-ready disabled>导入存档</button><button type="button" id="yc-boost" data-yc-ready disabled>资源增益</button></div>';
+            toggle = byId('yc-tools-toggle');
+            bar = document.createElement('dialog');
+            bar.id = 'yc-toolbar'; bar.setAttribute('aria-labelledby', 'yc-tools-title');
+            bar.innerHTML = '<header class="yc-drawer-head"><div class="yc-brand"><h2 id="yc-tools-title">YC自用</h2><span id="yc-status" role="status">正在初始化…</span></div><button type="button" id="yc-collapse">收起</button></header><div class="yc-actions"><button type="button" id="yc-export" data-yc-ready disabled>导出存档</button><button type="button" id="yc-import" data-yc-ready disabled>导入存档</button><button type="button" id="yc-boost" data-yc-ready disabled>资源增益</button></div>';
             document.body.appendChild(bar);
             status = byId('yc-status');
             dialog = document.createElement('dialog');
             dialog.id = 'yc-dialog'; dialog.setAttribute('aria-labelledby', 'yc-dialog-title');
             document.body.appendChild(dialog);
-            [bar, dialog].forEach(element => {
+            [bar, dialog, toggle].forEach(element => {
                 ['keydown', 'keyup', 'pointerdown', 'mousedown', 'touchstart'].forEach(type => element.addEventListener(type, event => event.stopPropagation()));
             });
-            dialog.addEventListener('close', () => { if (!dialog.open) { view = ''; selection++; } });
-            dialog.addEventListener('click', event => {
-                if (event.target === dialog) {
-                    const rect = dialog.getBoundingClientRect();
-                    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+            dialog.addEventListener('close', () => { if (!dialog.open) { view = ''; selection++; toggle.focus({ preventScroll: true }); } });
+            toggle.addEventListener('click', () => {
+                if (!ready || bar.open) return;
+                screen();
+                bar.showModal();
+                bar.scrollTop = 0;
+                toggle.setAttribute('aria-expanded', 'true');
+                byId('yc-collapse').focus();
+            });
+            byId('yc-collapse').addEventListener('click', () => bar.close());
+            bar.addEventListener('close', () => {
+                if (!bar.open) {
+                    toggle.setAttribute('aria-expanded', 'false');
+                    if (!dialog.open) toggle.focus({ preventScroll: true });
                 }
             });
+            [bar, dialog].forEach(panel => panel.addEventListener('click', event => {
+                if (event.target === panel) {
+                    const rect = panel.getBoundingClientRect();
+                    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) panel.close();
+                }
+            }));
             byId('yc-export').addEventListener('click', exportSave);
             byId('yc-import').addEventListener('click', importPanel);
             byId('yc-boost').addEventListener('click', boostPanel);
@@ -195,13 +214,6 @@
                 visualViewport.addEventListener('scroll', screen);
             }
             screen();
-            new ResizeObserver(() => {
-                const height = bar.getBoundingClientRect().height + 'px';
-                if (document.documentElement.style.getPropertyValue('--yc-bar-height') !== height) {
-                    document.documentElement.style.setProperty('--yc-bar-height', height);
-                    if (Game.ready) Game.resize();
-                }
-            }).observe(bar);
             Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) updateBoost(); });
         }
     });

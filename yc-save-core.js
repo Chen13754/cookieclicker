@@ -110,7 +110,7 @@
         if (![current, total].every(value => value + delta > value)) throw new Error('增量低于当前数值的精度，请使用更大的增量。');
         return delta;
     }
-    function importSave(game, storage, code) {
+    function importSave(game, storage, code, validate) {
         // Caller validates before invoking this operation. Native ImportSaveCode resets first.
         const previousStorage = storage.getItem(game.SaveTo); // fail before touching the game if storage is denied
         const snapshot = game.WriteSave(1);
@@ -119,6 +119,7 @@
             game.modSaveData = {};
             if (!game.ImportSaveCode(code)) throw new Error('原生读档未成功。');
             const current = game.WriteSave(1);
+            if (validate) validate(current); // reject a native load that produces an unreadable snapshot
             writing = true;
             storage.setItem(game.SaveTo, current);
             if (storage.getItem(game.SaveTo) !== current) throw new Error('浏览器未保存导入后的进度。');

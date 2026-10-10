@@ -42,3 +42,5 @@ test('当前版本缺少建筑/位字段和损坏的小游戏网格被拒绝',()
  const p=fixture().split('|');p[5]='0,0,0,0,,0,0;';assert.throws(()=>core.parseSave(encode(p.join('|')),2.058,decode,schema));
  const q=fixture().split('|'),b=q[5].split(';');b[2]='1,1,0,1,0:0:0:1:0:0:0:0:0: 1 1:NaN:,0,1';q[5]=b.join(';');assert.throws(()=>core.parseSave(encode(q.join('|')),2.058,decode,schema));
 });
+
+test('原生函数报告成功但产生损坏存档时，写入前拒绝并恢复',()=>{const g=game(),s=storage();const r=core.importSave(g,s,'corrupt',code=>{if(code==='corrupt')throw Error('bad native data')});assert.equal(r.restored,true);assert.equal(g.value,'before');assert.equal(s.getItem('YC'),'older');});

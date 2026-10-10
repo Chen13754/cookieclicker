@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
-const {start,load}=require('./helpers.cjs');
+const {start,load,openTools,tool}=require('./helpers.cjs');
 const passed=[];
 const run=async(name,fn)=>{await fn();passed.push(name);console.log('PASS',name);};
 async function freeze(page){await page.evaluate(()=>{Game.Logic=function(){};Game.prefs.autosave=0;});}
@@ -12,9 +12,23 @@ async function state(page){return page.evaluate(()=>({
  upgrades:Object.values(Game.UpgradesById).map(x=>[x.unlocked,x.bought]),achievements:Object.values(Game.AchievementsById).map(x=>x.won),
  minigames:Object.fromEntries(['Farm','Bank','Temple','Wizard tower'].map(name=>[name,Game.Objects[name].minigame?.save()||Game.Objects[name].minigameSave||'']))
 }));}
-async function choose(page,code){await page.locator('#yc-import').click();await page.locator('#yc-file').setInputFiles({name:'native.txt',mimeType:'text/plain',buffer:Buffer.from(code)});}
+async function collapsed(page) {
+ assert.equal(await page.locator('#yc-toolbar').isVisible(),false);
+ const layout=await page.evaluate(()=>({bottom:Game.wrapper.getBoundingClientRect().bottom,height:document.documentElement.clientHeight,rects:document.getElementById('yc-toolbar').getClientRects().length}));
+ assert.ok(Math.abs(layout.bottom-layout.height)<=2,JSON.stringify(layout));assert.equal(layout.rects,0);
+ const point=await page.evaluate(()=>{
+  const v=visualViewport,x=v.offsetLeft+v.width/2,y=v.offsetTop+v.height-5,target=document.elementFromPoint(x,y);
+  if(!target?.closest('#wrapper'))throw Error('Visible bottom is not part of the native game');
+  window.nativeBottomClicked=false;
+  // Observe an actual visible game target, without changing the synthetic progress.
+  target.addEventListener('click',event=>{nativeBottomClicked=true;event.stopImmediatePropagation();},{once:true,capture:true});
+  return {x,y};
+ });
+ await page.mouse.click(point.x,point.y);assert.equal(await page.evaluate(()=>nativeBottomClicked),true);
+}
+async function choose(page,code){await tool(page,'#yc-import');await page.locator('#yc-file').setInputFiles({name:'native.txt',mimeType:'text/plain',buffer:Buffer.from(code)});}
 async function confirm(page,code){await choose(page,code);await page.locator('#yc-confirm-import').click();await idle(page);}
-async function exportFile(page){const promise=page.waitForEvent('download');await page.locator('#yc-export').click();const file=await promise;assert.match(file.suggestedFilename(),/^yc-save-\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d\.txt$/);const code=fs.readFileSync(await file.path(),'utf8');assert.equal(code,await page.locator('#yc-save-text').inputValue());await page.locator('#yc-close').click();return code;}
+async function exportFile(page){const promise=page.waitForEvent('download');await tool(page,'#yc-export');const file=await promise;assert.match(file.suggestedFilename(),/^yc-save-\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d\.txt$/);const code=fs.readFileSync(await file.path(),'utf8');assert.equal(code,await page.locator('#yc-save-text').inputValue());await page.locator('#yc-close').click();return code;}
 (async()=>{
  const app=await start();let officialSave,expected,returned,offlineSave,offlineExpected,offlineNow;
  try{
@@ -51,12 +65,23 @@ async function exportFile(page){const promise=page.waitForEvent('download');awai
    assert.equal(await page.locator('#yc-toolbar').count(),1);assert.equal(await page.locator('#yc-dialog').count(),1);
   });
   await freeze(page);
+  await run('默认收起且无底部占位，原版底部内容可点击',async()=>{await collapsed(page);});
+  await run('抽屉反复开关、收起、Esc、外部点击与焦点返回',async()=>{
+   const before=await state(page);
+   for(let i=0;i<2;i++){await openTools(page);assert.equal(await page.locator('#yc-tools-toggle').getAttribute('aria-expanded'),'true');await page.locator('#yc-collapse').click();await page.waitForFunction(()=>document.activeElement.id==='yc-tools-toggle');await collapsed(page);}
+   await openTools(page);await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.getElementById('yc-toolbar').open);await collapsed(page);
+   await openTools(page);await page.mouse.click(10,55);await page.waitForFunction(()=>!document.getElementById('yc-toolbar').open && document.getElementById('yc-tools-toggle').getAttribute('aria-expanded')==='false');assert.equal(await page.locator('#yc-tools-toggle').getAttribute('aria-expanded'),'false');
+   assert.equal(await page.evaluate(()=>document.activeElement.id),'yc-tools-toggle');assert.deepEqual(await state(page),before);
+  });
+  await run('原版选项入口可直接打开导入，关闭后不自动展开工具',async()=>{
+   await page.evaluate(()=>Game.ImportSave());await page.locator('#yc-file').waitFor();assert.equal(await page.locator('#yc-toolbar').isVisible(),false);await page.locator('#yc-close').click();await page.waitForFunction(()=>document.activeElement.id==='yc-tools-toggle');await collapsed(page);
+  });
   await run('新进度原生文件导出、取消文件选择不改进度',async()=>{
    const before=await state(page),code=await exportFile(page);assert.match(unescape(code),/!END!$/);
-   await page.locator('#yc-import').click();await page.locator('#yc-file').setInputFiles([]);await page.locator('#yc-close').click();assert.deepEqual(await state(page),before);
+   await tool(page,'#yc-import');await page.locator('#yc-file').setInputFiles([]);await page.locator('#yc-close').click();assert.deepEqual(await state(page),before);
   });
   await run('首次增益提示可取消，锁定糖块不可增加',async()=>{
-   await page.locator('#yc-boost').click();await page.locator('#yc-cancel-boost').click();await page.locator('#yc-boost').click();await page.locator('#yc-accept-boost').click();
+   await tool(page,'#yc-boost');await page.locator('#yc-cancel-boost').click();await tool(page,'#yc-boost');await page.locator('#yc-accept-boost').click();
    assert.equal(await page.locator('[data-lumps="1"]').isDisabled(),true);
   });
   await run('三档饼干和自定义数值沿用原生累计统计',async()=>{
@@ -67,7 +92,7 @@ async function exportFile(page){const promise=page.waitForEvent('download');awai
   await run('糖块按原生接口增加当前和累计并触发成就',async()=>{
    for(const n of [1,10]){const before=await state(page);await page.locator('[data-lumps="'+n+'"]').click();const after=await state(page);assert.equal(after.lumps,Math.max(0,before.lumps)+n);assert.equal(after.lumpsTotal,Math.max(0,before.lumpsTotal)+n);}
    assert.equal(await page.evaluate(()=>Game.Achievements['Dude, sweet'].won),1);
-   await page.locator('#yc-close').click();await page.locator('#yc-boost').click();assert.equal(await page.locator('#yc-accept-boost').count(),0);await page.locator('#yc-close').click();
+   await page.locator('#yc-close').click();await tool(page,'#yc-boost');assert.equal(await page.locator('#yc-accept-boost').count(),0);await page.locator('#yc-close').click();
   });
   await run('官网原生存档预览时间、取消覆盖不改进度',async()=>{
    const before=await state(page);await choose(page,officialSave);assert.equal(await page.locator('#yc-import-version').innerText(),'2.058');assert.ok(await page.locator('#yc-import-time').innerText());await page.locator('#yc-cancel-import').click();assert.deepEqual(await state(page),before);
@@ -82,7 +107,7 @@ async function exportFile(page){const promise=page.waitForEvent('download');awai
    await confirm(page,officialSave);assert.deepEqual(await state(page),expected);assert.match(await page.locator('#yc-status').innerText(),/已导入/);returned=await exportFile(page);
   });
   await run('导入立即持久化，刷新自动恢复且语言和标题正确',async()=>{
-   await page.reload();await page.waitForFunction(()=>window.Game?.ready && !document.getElementById('yc-export')?.disabled);await idle(page);await freeze(page);const after=await state(page);
+   await page.reload();await page.waitForFunction(()=>window.Game?.ready && !document.getElementById('yc-tools-toggle')?.disabled);await idle(page);await freeze(page);await collapsed(page);const after=await state(page);
    for(const field of ['resets','prestige','chips','bakery'])assert.deepEqual(after[field],expected[field]);
    after.buildings.forEach((b,i)=>{for(const n of [0,1,3,4])assert.equal(b[n],expected.buildings[i][n]);assert.ok(b[2]>=expected.buildings[i][2]);});
    assert.deepEqual(after.upgrades.map(x=>x[1]),expected.upgrades.map(x=>x[1]));
@@ -97,17 +122,22 @@ async function exportFile(page){const promise=page.waitForEvent('download');awai
    await page.evaluate(()=>{window.nativeSet=Storage.prototype.setItem;let once=true;Storage.prototype.setItem=function(k,v){if(k===Game.SaveTo && once){once=false;nativeSet.call(this,k,v);throw Error('test quota');}return nativeSet.call(this,k,v);};});
    await choose(page,officialSave);await page.locator('#yc-confirm-import').click();await page.locator('#yc-import-failure').waitFor();await idle(page);assert.deepEqual(await state(page),before);assert.equal(await page.evaluate(()=>localStorage.getItem(Game.SaveTo)),stored);await page.locator('#yc-close').click();await page.evaluate(()=>{Storage.prototype.setItem=nativeSet;});
   });
+  await run('原生报告成功但生成损坏进度时，持久化前拒绝并恢复',async()=>{
+   const before=await state(page),stored=await page.evaluate(()=>localStorage.getItem(Game.SaveTo));
+   await page.evaluate(()=>{window.nativeLoad=Game.LoadSave;let once=true;Game.LoadSave=function(...args){const ok=nativeLoad.apply(Game,args);if(once){once=false;Game.cookies=NaN;}return ok;};});
+   await choose(page,officialSave);await page.locator('#yc-confirm-import').click();await page.locator('#yc-import-failure').waitFor();await idle(page);assert.deepEqual(await state(page),before);assert.equal(await page.evaluate(()=>localStorage.getItem(Game.SaveTo)),stored);await page.locator('#yc-close').click();await page.evaluate(()=>{Game.LoadSave=nativeLoad;});
+  });
   await run('原版离线收益一致：跨越一小时衰减边界',async()=>{
    const actual=await page.evaluate(({code,now})=>{YCSaveCore.parseSave(code,Game.version,b64_to_utf8);const clock=Date.now;Date.now=()=>now;try{const result=YCSaveCore.importSave(Game,localStorage,code);if(!result.ok)throw Error(result.message);return {cookies:Game.cookies,earned:Game.cookiesEarned};}finally{Date.now=clock;}},{code:offlineSave,now:offlineNow});
    assert.ok(actual.cookies>123456789);assert.deepEqual(actual,offlineExpected);
   });
   await run('精度无效和溢出增益不改资源',async()=>{
-   await page.evaluate(()=>{Game.cookies=Game.cookiesEarned=1e30;});await page.locator('#yc-boost').click();if(await page.locator('#yc-accept-boost').count())await page.locator('#yc-accept-boost').click();
+   await page.evaluate(()=>{Game.cookies=Game.cookiesEarned=1e30;});await tool(page,'#yc-boost');if(await page.locator('#yc-accept-boost').count())await page.locator('#yc-accept-boost').click();
    await page.locator('[data-cookies="1000"]').click();assert.match(await page.locator('#yc-boost-status').innerText(),/精度/);assert.equal((await state(page)).cookies,1e30);
    await page.evaluate(()=>{Game.cookies=Game.cookiesEarned=Number.MAX_VALUE;});await page.locator('#yc-custom').fill(String(Number.MAX_VALUE));await page.locator('#yc-custom-add').click();assert.match(await page.locator('#yc-boost-status').innerText(),/溢出/);await page.locator('#yc-close').click();
   });
   await run('剪贴板受限时选中完整存档文本作为后备',async()=>{
-   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied');}}}));await exportFile(page);await page.locator('#yc-export').click();await page.locator('#yc-copy').click();assert.match(await page.locator('#yc-copy-status').innerText(),/已选中/);assert.equal(await page.locator('#yc-save-text').evaluate(el=>el.selectionEnd-el.selectionStart===el.value.length),true);await page.locator('#yc-close').click();
+   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied');}}}));await exportFile(page);await tool(page,'#yc-export');await page.locator('#yc-copy').click();assert.match(await page.locator('#yc-copy-status').innerText(),/已选中/);assert.equal(await page.locator('#yc-save-text').evaluate(el=>el.selectionEnd-el.selectionStart===el.value.length),true);await page.locator('#yc-close').click();
   });
   await run('双重恢复失败时暂停自动保存并下载导入前快照',async()=>{
    await page.evaluate(()=>{Game.cookies=333;Game.cookiesEarned=444;Game.prefs.autosave=1;window.beforeEmergency=Game.WriteSave(1);Game.LoadSave=()=>false;});
@@ -119,10 +149,19 @@ async function exportFile(page){const promise=page.waitForEvent('download');awai
   await run('本站导出重新由未修改的原版引擎读取，完整进度往返',async()=>{
    assert.equal(await page.evaluate(code=>Game.ImportSaveCode(code),returned),true);await idle(page);assert.deepEqual(await state(page),expected);assert.deepEqual(errors,[]);
   });await ctx.close();
-  for(const size of [[320,568],[390,844],[768,1024],[1024,768],[1440,900]]){
+  for(const size of [[320,568],[390,844],[844,390],[768,1024],[1024,768],[1440,900]]){
    await run('触屏/桌面 '+size.join('×')+'：面板、文件选择、确认、导出',async()=>{
     ctx=await app.browser.newContext({viewport:{width:size[0],height:size[1]},isMobile:size[0]<1100,hasTouch:size[0]<1100,deviceScaleFactor:1,acceptDownloads:true});({page,errors}=await load(ctx,process.env.YC_URL||app.url+'/cookieclicker/'));await freeze(page);
-    const click=async selector=>size[0]<1100?page.locator(selector).tap():page.locator(selector).click();
+    const click=async selector=>['#yc-export','#yc-import','#yc-boost'].includes(selector)?tool(page,selector,size[0]<1100):(size[0]<1100?page.locator(selector).tap():page.locator(selector).click());
+    await collapsed(page);
+    await page.screenshot({path:'test-results/'+size.join('x')+'-collapsed.png'});
+    await openTools(page,size[0]<1100);
+    await page.screenshot({path:'test-results/'+size.join('x')+'-drawer.png'});
+    if(size[0]===768){
+     await page.setViewportSize({width:1024,height:768});await page.waitForFunction(()=>Math.abs(visualViewport.width*visualViewport.scale-1024)<1);
+     await page.waitForFunction(()=>{const el=document.getElementById('yc-toolbar'),r=el.getBoundingClientRect(),v=visualViewport;return el.open && r.left>=v.offsetLeft-1 && r.right<=v.offsetLeft+v.width+1 && r.top>=v.offsetTop-1 && r.bottom<=v.offsetTop+v.height+1;},null,{timeout:5000}).catch(async e=>{console.log('rotation',await page.evaluate(()=>({rect:document.getElementById('yc-toolbar').getBoundingClientRect().toJSON(),viewport:{width:visualViewport.width,height:visualViewport.height,left:visualViewport.offsetLeft,top:visualViewport.offsetTop},style:document.documentElement.getAttribute('style')})));throw e;});
+     await page.setViewportSize({width:768,height:1024});await page.waitForFunction(()=>Math.abs(visualViewport.width*visualViewport.scale-768)<1 && Math.abs(document.getElementById('yc-toolbar').getBoundingClientRect().width-visualViewport.width)<1);
+    }
     const physical=await page.evaluate(()=>{const b=document.getElementById('yc-export').getBoundingClientRect(),s=visualViewport.scale;return {height:b.height*s,right:b.right*s,left:b.left*s,width:visualViewport.width*s};});
     assert.ok(physical.height>=43.9);assert.ok(physical.left>=0&&physical.right<=physical.width+1);
     await click('#yc-boost');await click('#yc-accept-boost');await click('[data-cookies="1000"]');assert.equal((await state(page)).cookies,1000);
