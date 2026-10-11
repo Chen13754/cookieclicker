@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
-const {start,load,openTools,tool}=require('./helpers.cjs');
+const {start,load,openTools,tool,cleanHeader}=require('./helpers.cjs');
 const passed=[];
 const run=async(name,fn)=>{await fn();passed.push(name);console.log('PASS',name);};
 async function freeze(page){await page.evaluate(()=>{Game.Logic=function(){};Game.prefs.autosave=0;});}
@@ -63,6 +63,18 @@ async function exportFile(page){const promise=page.waitForEvent('download');awai
    await page.waitForFunction(()=>Game.T>40);assert.equal(await page.title(),'YC自用');assert.equal(await page.evaluate(()=>locId),'ZH-CN');
    await page.addScriptTag({url:new URL('yc-tools.js?v=1',page.url()).href});
    assert.equal(await page.locator('#yc-toolbar').count(),1);assert.equal(await page.locator('#yc-dialog').count(),1);
+  });
+  await run('顶部推广及协议锁移除，语言切换和刷新不回填',async()=>{
+   await cleanHeader(page);
+   const key=await page.evaluate(()=>Game.SaveTo);
+   for(const lang of ['EN','ZH-CN']){
+    await page.locator('#changeLanguage').click();
+    await Promise.all([page.waitForEvent('load'),page.locator('#langSelect-'+lang).click()]);
+    await page.waitForFunction(lang=>window.Game?.ready===1 && locId===lang && !document.getElementById('yc-tools-toggle')?.disabled,lang);
+    await cleanHeader(page);assert.equal(await page.evaluate(()=>Game.SaveTo),key);
+   }
+   await page.reload();await page.waitForFunction(()=>window.Game?.ready===1 && !document.getElementById('yc-tools-toggle')?.disabled);await cleanHeader(page);
+   assert.equal(await page.evaluate(()=>locId),'ZH-CN');assert.deepEqual(errors,[]);
   });
   await freeze(page);
   await run('默认收起且无底部占位，原版底部内容可点击',async()=>{await collapsed(page);});
@@ -153,7 +165,7 @@ async function exportFile(page){const promise=page.waitForEvent('download');awai
    await run('触屏/桌面 '+size.join('×')+'：面板、文件选择、确认、导出',async()=>{
     ctx=await app.browser.newContext({viewport:{width:size[0],height:size[1]},isMobile:size[0]<1100,hasTouch:size[0]<1100,deviceScaleFactor:1,acceptDownloads:true});({page,errors}=await load(ctx,process.env.YC_URL||app.url+'/cookieclicker/'));await freeze(page);
     const click=async selector=>['#yc-export','#yc-import','#yc-boost'].includes(selector)?tool(page,selector,size[0]<1100):(size[0]<1100?page.locator(selector).tap():page.locator(selector).click());
-    await collapsed(page);
+    await collapsed(page);await cleanHeader(page);
     await page.screenshot({path:'test-results/'+size.join('x')+'-collapsed.png'});
     await openTools(page,size[0]<1100);
     await page.screenshot({path:'test-results/'+size.join('x')+'-drawer.png'});

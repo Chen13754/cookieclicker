@@ -2099,7 +2099,7 @@ Game.Launch=function()
 		}
 		Game.clickStr=Game.touchEvents?'ontouchend':'onclick';
 		
-		l('versionNumber').innerHTML='v. '+Game.version+(!App?('<div id="httpsSwitch" style="cursor:pointer;display:inline-block;background:url(img/'+(Game.https?'lockOn':'lockOff')+'.png);width:16px;height:16px;position:relative;top:4px;left:0px;margin:0px -2px;"></div>'):'')+(Game.beta?' <span style="color:#ff0;">beta</span>':'');
+		l('versionNumber').innerHTML='v. '+Game.version+(Game.beta?' <span style="color:#ff0;">beta</span>':'');
 		
 		Game.lastActivity=Date.now();//reset on mouse move, key press or click
 		
@@ -2647,30 +2647,12 @@ Game.Launch=function()
 		{
 			//top bar stuff on web
 			
-			Game.attachTooltip(l('httpsSwitch'),'<div style="padding:8px;width:350px;text-align:center;font-size:11px;">'+loc("You are currently playing Cookie Clicker on the <b>%1</b> protocol.<br>The <b>%2</b> version uses a different save slot than this one.<br>Click this lock to reload the page and switch to the <b>%2</b> version!",[(Game.https?'HTTPS':'HTTP'),(Game.https?'HTTP':'HTTPS')])+'</div>','this');
-			AddEvent(l('httpsSwitch'),'click',function(){
-				PlaySound('snd/pop'+Math.floor(Math.random()*3+1)+'.mp3',0.75);
-				if (location.protocol=='https:') location.href='http:'+window.location.href.substring(window.location.protocol.length);
-				else if (location.protocol=='http:') location.href='https:'+window.location.href.substring(window.location.protocol.length);
-			});
-			
 			AddEvent(l('changeLanguage'),'click',function()
 			{
 				Game.showLangSelection();
 			});
 			
-			Game.attachTooltip(l('topbarOrteil'),'<div style="padding:8px;width:250px;text-align:center;">Back to Orteil\'s subdomain!<br>Lots of other games in there!</div>'+tinyIcon([17,5],'display:block;margin:-12px auto;'),'this');
-			Game.attachTooltip(l('topbarDashnet'),'<div style="padding:8px;width:250px;text-align:center;">Back to our homepage!</div>','this');
-			Game.attachTooltip(l('topbarTwitter'),'<div style="padding:8px;width:250px;text-align:center;">Orteil\'s bluesky, which sometimes features game updates.</div>','this');
-			Game.attachTooltip(l('topbarTumblr'),'<div style="padding:8px;width:250px;text-align:center;">Orteil\'s tumblr, which sometimes features game updates.</div>','this');
-			Game.attachTooltip(l('topbarDiscord'),'<div style="padding:8px;width:250px;text-align:center;">Our official discord server.<br>You can share tips and questions about Cookie Clicker and all our other games!</div>','this');
-			Game.attachTooltip(l('topbarMerch'),'<div style="padding:8px;width:250px;text-align:center;">Cookie Clicker shirts, hoodies and stickers!</div>','this');
-			Game.attachTooltip(l('topbarMobileCC'),'<div style="padding:8px;width:250px;text-align:center;">Play Cookie Clicker on your phone!<br>(Android only; iOS version will be released later)</div>','this');
-			Game.attachTooltip(l('topbarSteamCC'),'<div style="padding:8px;width:250px;text-align:center;">Get Cookie Clicker on Steam!<br>Featuring music by C418.</div>','this');
-			Game.attachTooltip(l('topbarRandomgen'),'<div style="padding:8px;width:250px;text-align:center;">A thing we made that lets you write random generators.</div>','this');
-			Game.attachTooltip(l('topbarIGM'),'<div style="padding:8px;width:250px;text-align:center;">A thing we made that lets you create your own idle games using a simple scripting language.</div>','this');
 			l('changeLanguage').innerHTML=loc("Change language");
-			l('topbarOtherVersions').childNodes[0].nodeValue=loc("Other versions");
 			
 			if (!App)
 			{
@@ -2686,93 +2668,6 @@ Game.Launch=function()
 					}
 				});
 			}
-			
-			getJson(DataDir+'cookieclickerinfo.json',function(r){
-				if (r)
-				{
-					var versions=r.versions||[];
-					var url=new URL(window.location.href);url=url.origin+url.pathname.replace(/\/$/,'');
-					
-					//other versions
-					var str='';
-					str+='<div class="hoverheader">'+loc("Other versions")+'</div>';
-					str+='<div class="hoverable">';
-						for (var i=0;i<r.versions.length;i++)
-						{
-							var me=r.versions[i];
-							if (me.off) continue;
-							if (!EN)
-							{
-								if (me.v=='LIVE') me.text="Live";
-								else if (me.v=='BETA') me.text="Beta";
-								else if (me.v=='CLASSIC') me.text="Classic";
-							}
-							var style=me.style||'';
-							if (me.url) me.url=me.url.replace('$DIR',window.location.origin);
-							if (me.url && url==me.url) style+='display:none;';//hide current
-							str+='<div style="'+style+'">';
-							if (me.url) str+='<a href="'+me.url+'" target="_blank">'+me.text+'</a>';
-							else str+=me.text;
-							str+='</div>';
-						}
-					str+='</div>';
-					l('topbarOtherVersions').innerHTML=str;
-					
-					//extra css
-					var extraCss=r.extraCss||'';
-					if (Array.isArray(extraCss)) extraCss=extraCss.join('\n');
-					var css=document.createElement('style');
-					css.type='text/css';
-					css.innerHTML=extraCss;
-					document.head.appendChild(css);
-					
-					//links
-					var links=r.links||[];
-					var str='';
-					for (var i=0;i<r.links.length;i++)
-					{
-						var me=r.links[i];
-						if (me.off) continue;
-						if (me.remove)
-						{
-							let rem=me.remove.split(' ');
-							for (var ii=0;ii<rem.length;ii++)
-							{
-								let id=rem[ii];
-								if (id[id.length-1]=='+')//"id+" means remove parent too
-								{
-									id=id.slice(0,-1);
-									let el=l(id);
-									if (el && el.parentNode) el.parentNode.parentNode.removeChild(el.parentNode);
-								}
-								else
-								{
-									let el=l(id);
-									if (el) el.parentNode.removeChild(el);
-								}
-							}
-						}
-						str+='<div class="topLink'+(me.class?(' '+me.class):'')+'" style="'+(me.style||'')+'">';
-							if (me.url) str+='<a id="topLink-'+i+'" href="'+me.url.replace('$DIR',window.location.origin)+'" target="_blank">'+me.text+'</a>';
-							else str+=me.text;
-						str+='</div>';
-					}
-					l('topbarOtherVersions').insertAdjacentHTML('beforebegin',str);
-					
-					//link tooltips
-					for (var i=0;i<r.links.length;i++)
-					{
-						var me=r.links[i];
-						if (me.off) continue;
-						if (me.tooltip)
-						{
-							var el=l('topLink-'+i);
-							if (!el) continue;
-							Game.attachTooltip(el,'<div style="padding:8px;width:250px;text-align:center;">'+me.tooltip+'</div>','this');
-						}
-					}
-				}
-			});
 			
 		}
 		
